@@ -1,10 +1,11 @@
 {
-    "general": "Em geral",
+    "general": "Geral",
     "polltime": "Intervalo",
-    "polltime_help": "Intervall em segundos, para pesquisar evcc",
+    "polltime_help": "Intervalo em segundos, para consultar o evcc",
     "ip": "IP",
-    "ip_help": "Endereços IP para sua instalação evcc",
+    "ip_help": "Endereço IP da sua instalação do evcc",
     "port": "Porta",
-    "port_help": "Porta para sua instalação evcc",
-    "dissolveObjects": "Dissolver objectos de estado"
+    "port_help": "Porta da sua instalação do evcc",
+    "dissolveObjects": "Dissolver objetos de estado",
+    "Weather Forecast": "Previsão do tempo"
 }

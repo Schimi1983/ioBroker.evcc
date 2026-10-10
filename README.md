@@ -37,8 +37,7 @@ Use `loadpoint.X.status.alwaysCharge` or `loadpoint.X.control.pvControl` to dist
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-
-### **WORK IN PROGRESS**
+### 0.3.1 (2026-10-10)
 * (arteck) Dependencies have been updated
 * (Schimi1983) fix: `enableThreshold` / `disableThreshold` could not be set
 * (Schimi1983) fix: global `control.smartCostLimit` was sent to loadpoint `undefined`
@@ -63,10 +62,6 @@ Use `loadpoint.X.status.alwaysCharge` or `loadpoint.X.control.pvControl` to dist
 
 ### 0.2.8 (2026-03-09)
 * (arteck) reduce read request, static dp read only once
-
-### 0.2.7 (2026-03-09)
-* (arteck) delete big arrays feedin, grid, planner
-* (arteck) refactor tests
 
 [Older changelogs can be found there](CHANGELOG_OLD.md)
 

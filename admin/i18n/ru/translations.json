@@ -1,10 +1,11 @@
 {
     "general": "Общий",
-    "polltime": "интервал",
-    "polltime_help": "Интервал в секундах для поиска evcc",
+    "polltime": "Интервал",
+    "polltime_help": "Интервал в секундах для опроса evcc",
     "ip": "IP",
-    "ip_help": "IP-адреса для вашей установки evcc",
+    "ip_help": "IP-адрес вашей установки evcc",
     "port": "Порт",
-    "port_help": "Перенос на вашу установку evcc",
-    "dissolveObjects": "Растворить объекты статуса"
+    "port_help": "Порт вашей установки evcc",
+    "dissolveObjects": "Разворачивать объекты статуса",
+    "Weather Forecast": "Прогноз погоды"
 }
