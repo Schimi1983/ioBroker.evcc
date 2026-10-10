@@ -37,7 +37,7 @@ Use `loadpoint.X.status.alwaysCharge` or `loadpoint.X.control.pvControl` to dist
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
-### **WORK IN PROGRESS**
+### 0.3.1 (2026-10-10)
 * (arteck) Dependencies have been updated
 * (Schimi1983) fix: `enableThreshold` / `disableThreshold` could not be set
 * (Schimi1983) fix: global `control.smartCostLimit` was sent to loadpoint `undefined`
