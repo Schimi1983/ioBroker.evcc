@@ -134,8 +134,21 @@ class Evcc extends utils.Adapter {
      * @param writes gesammelte State-Werte
      */
     async flushStates(writes) {
-        for (let i = 0; i < writes.length && !this.stopping; i += WRITE_CONCURRENCY) {
-            await Promise.all(writes.slice(i, i + WRITE_CONCURRENCY).map(w => this.setStateAsync(w.id, { val: w.val, ack: true })));
+        // Felder, die evcc nicht liefert (undefined), nicht schreiben
+        const valid = writes.filter(w => w.val !== undefined);
+        let failed = 0;
+        for (let i = 0; i < valid.length && !this.stopping; i += WRITE_CONCURRENCY) {
+            // allSettled: ein einzelner fehlerhafter State bricht nicht die ganze Abfrage ab
+            const results = await Promise.allSettled(valid.slice(i, i + WRITE_CONCURRENCY).map(w => this.setStateAsync(w.id, { val: w.val, ack: true })));
+            results.forEach((result, j) => {
+                if (result.status === 'rejected') {
+                    failed++;
+                    this.log.debug(`setState ${valid[i + j].id} failed: ${String(result.reason)}`);
+                }
+            });
+        }
+        if (failed > 0 && !this.stopping) {
+            this.log.warn(`${failed} state(s) could not be written in this poll (details in debug log)`);
         }
     }
     /**
