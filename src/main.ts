@@ -9,6 +9,7 @@ import {
 } from './lib/tools';
 import type { Loadpoint } from './lib/loadpoint';
 import { currencySymbol, getFieldMeta } from './lib/units';
+import { planTimeOrDefault, resolveLoadpointPlan } from './lib/plan';
 import type { Vehicle } from './lib/vehicle';
 import { SendEvcc } from './lib/sendEvcc';
 import {
@@ -170,6 +171,13 @@ class Evcc extends utils.Adapter {
         // 4 Teile: <adapter>.<instance>.<channel>.<action>
         // 5 Teile: <adapter>.<instance>.<channel>.<index>.<action>
         // 6 Teile: <adapter>.<instance>.<channel>.<index>.<group>.<action>
+        // 7 Teile: <adapter>.<instance>.loadpoint.<index>.control.plan.<action> (Ladeplan am Ladepunkt, Issue #73)
+        if (idParts.length === 7 && idParts[2] === 'loadpoint' && idParts[4] === 'control' && idParts[5] === 'plan') {
+            this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+            void this.handleLoadpointPlan(idParts[3], idParts[6], state.val);
+            return;
+        }
+
         let index: string | undefined;
         let group: string | undefined;
         let action: string | undefined;
@@ -332,6 +340,66 @@ class Evcc extends utils.Adapter {
     }
 
     /**
+     * Handles writes to loadpoint.<index>.control.plan.(active|time|soc|energy) (issue #73).
+     * With a vehicle assigned to the loadpoint the soc plan of that vehicle is set,
+     * otherwise the energy plan of the loadpoint (vehicle without soc / guest vehicle).
+     * Values written while no plan is active are only stored and used on activation.
+     *
+     * @param index loadpoint index (starts with 1)
+     * @param action active | time | soc | energy
+     * @param val written value
+     */
+    private async handleLoadpointPlan(index: string, action: string, val: ioBroker.StateValue): Promise<void> {
+        const base = `loadpoint.${index}.control.plan`;
+        if (!['active', 'time', 'soc', 'energy'].includes(action)) {
+            this.log.warn(`Unhandled plan state: ${base}.${action}`);
+            return;
+        }
+
+        const vehicleState = await this.getStateAsync(`loadpoint.${index}.control.vehicleName`);
+        const vehicleName = typeof vehicleState?.val === 'string' ? vehicleState.val : '';
+        const useVehicle = vehicleName !== '' && this.knownVehicles.has(vehicleName);
+
+        if (action === 'active' && !val) {
+            this.log.info(`Delete plan on loadpointindex: ${index}${useVehicle ? ` (vehicle ${vehicleName})` : ''}`);
+            if (useVehicle) {
+                await this.evcc.deleteVehiclePlan(vehicleName);
+            } else {
+                await this.evcc.deleteLoadpointEnergyPlan(index);
+            }
+            return;
+        }
+
+        const read = async (key: string): Promise<number> =>
+            Number(action === key ? val : (await this.getStateAsync(`${base}.${key}`))?.val);
+        const active = action === 'active' ? true : (await this.getStateAsync(`${base}.active`))?.val === true;
+
+        if (!active) {
+            // Plan nicht aktiv: Wert nur übernehmen, wird beim Aktivieren verwendet
+            await this.setStateAsync(`${base}.${action}`, { val, ack: true });
+            return;
+        }
+
+        const time = planTimeOrDefault(await read('time'));
+
+        if (useVehicle) {
+            const soc = await read('soc');
+            const planSoc = soc > 0 && soc <= 100 ? soc : 100;
+            this.log.info(`Set plan on loadpointindex: ${index} (vehicle ${vehicleName}) to ${planSoc} % at ${time.toISOString()}`);
+            await this.evcc.setVehiclePlan(vehicleName, planSoc, time);
+            return;
+        }
+
+        const energy = await read('energy');
+        if (!(energy > 0)) {
+            this.log.warn(`Cannot set energy plan on loadpointindex: ${index}: ${base}.energy must be > 0 kWh`);
+            return;
+        }
+        this.log.info(`Set energy plan on loadpointindex: ${index} to ${energy} kWh at ${time.toISOString()}`);
+        await this.evcc.setLoadpointEnergyPlan(index, energy, time);
+    }
+
+    /**
      * Sets the charge mode of a loadpoint, using the API of the detected evcc version.
      * evcc < 0.316.0: smart is sent as pv, smart + alwaysCharge on as minpv.
      * evcc >= 0.316.0: mode and alwaysCharge are sent separately.
@@ -436,7 +504,7 @@ class Evcc extends utils.Adapter {
             //Laden jeden Ladepunkt einzeln
             const loadpoints: Loadpoint[] = Array.isArray(respData.loadpoints) ? respData.loadpoints : [];
             for (const [index, loadpoint] of loadpoints.entries()) {
-                await this.setLoadPointdata(loadpoint, index);
+                await this.setLoadPointdata(loadpoint, index, respData.vehicles);
             }
 
             for (const [vehicleKey, vehicle] of Object.entries(respData.vehicles ?? {})) {
@@ -761,7 +829,7 @@ class Evcc extends utils.Adapter {
      * @param loadpoint
      * @param index
      */
-    async setLoadPointdata(loadpoint: Loadpoint, index: number): Promise<void> {
+    async setLoadPointdata(loadpoint: Loadpoint, index: number, vehicles?: Record<string, any>): Promise<void> {
         //Ladepunkt kann es X fach geben
         index = index + 1; // +1 why Evcc starts with 1
         this.log.debug(`Ladepunkt mit index ` + `loadpoint.${index} gefunden...`);
@@ -796,6 +864,21 @@ class Evcc extends utils.Adapter {
 
         if (isAlwaysChargeValue(loadpoint.alwaysCharge)) {
             writes.push({ id: `${control}.alwaysCharge`, val: loadpoint.alwaysCharge });
+        }
+
+        // Ladeplan am Ladepunkt: aktiv immer, Werte nur bei gesetztem Plan (vorbereitete Werte bleiben stehen)
+        const plan = resolveLoadpointPlan(loadpoint, vehicles);
+        writes.push({ id: `${control}.plan.active`, val: plan.active });
+        if (plan.active) {
+            if (plan.time !== undefined) {
+                writes.push({ id: `${control}.plan.time`, val: plan.time });
+            }
+            if (plan.soc !== undefined) {
+                writes.push({ id: `${control}.plan.soc`, val: plan.soc });
+            }
+            if (plan.energy !== undefined) {
+                writes.push({ id: `${control}.plan.energy`, val: plan.energy });
+            }
         }
 
         //Alle Werte unter Status veröffentlichen
@@ -1062,6 +1145,27 @@ class Evcc extends utils.Adapter {
             native: {},
         });
         this.subscribeStates(`loadpoint.${index}.control.vehicleName`);
+
+        // Ladeplan am Ladepunkt (Issue #73)
+        const planStates: { id: string; common: Partial<ioBroker.StateCommon> }[] = [
+            { id: 'active', common: { name: 'plan set (true = create/update, false = delete)', type: 'boolean', role: 'switch' } },
+            { id: 'time', common: { name: 'plan target time', type: 'number', role: 'date' } },
+            { id: 'soc', common: { name: 'plan target soc (vehicle assigned)', type: 'number', role: 'level', unit: '%', min: 1, max: 100 } },
+            { id: 'energy', common: { name: 'plan target energy (no vehicle with soc)', type: 'number', role: 'level', unit: 'kWh', min: 0 } },
+        ];
+        await this.ensureObjectOnce(`loadpoint.${index}.control.plan`, {
+            type: 'channel',
+            common: { name: 'charging plan' },
+            native: {},
+        });
+        for (const planState of planStates) {
+            await this.setObjectNotExistsAsync(`loadpoint.${index}.control.plan.${planState.id}`, {
+                type: 'state',
+                common: { read: true, write: true, ...planState.common } as ioBroker.StateCommon,
+                native: {},
+            });
+            this.subscribeStates(`loadpoint.${index}.control.plan.${planState.id}`);
+        }
     }
 
 }
