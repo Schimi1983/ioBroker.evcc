@@ -12,17 +12,13 @@ process.on('unhandledRejection', (e) => {
     throw e;
 });
 
-// enable the should interface with sinon
-// chai-as-promised is no longer a direct devDependency (provided only nested by @iobroker/testing),
-// so it is not loaded here; no test uses it.
-const { should, use } = require('chai');
+// enable the should interface of chai
+// mocha, sinon and sinon-chai are provided by @iobroker/testing (repochecker W0063) and are not loaded here;
+// chai is a direct devDependency because @iobroker/testing installs it only nested.
+const { should } = require('chai');
 
 exports.mochaHooks = {
-    async beforeAll() {
-        const sinonChaiModule = await import('sinon-chai');
-        const sinonChai = sinonChaiModule.default || sinonChaiModule;
-
+    beforeAll() {
         should();
-        use(sinonChai);
     },
 };

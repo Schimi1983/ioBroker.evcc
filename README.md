@@ -56,6 +56,7 @@ Note: evcc's own `status.planActive` means "currently charging according to plan
 * (Schimi1983) fix: no errors in the log when the adapter is stopped during a poll
 * (Schimi1983) fix unit tests: chai-as-promised is no longer loaded in test setup (not a direct dependency anymore)
 * (Schimi1983) charging plan per loadpoint: `control.plan.active/time/soc/energy` (soc plan of the assigned vehicle or energy plan of the loadpoint), closes #73 and #18
+* (Schimi1983) repository checker (#135): remove test dependencies already provided by @iobroker/testing, CHANGELOG_OLD.md in .npmignore, consistent formatting of admin/jsonConfig.json
 
 ### 0.3.1 (2026-10-10)
 * (arteck) Dependencies have been updated
